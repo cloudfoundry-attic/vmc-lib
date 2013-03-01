@@ -148,7 +148,7 @@ module CFoundry::V2
     end
 
     def attribute(name, type, opts = {})
-      attributes[name] = opts
+      attributes[name] = [type, opts]
       json_name = opts[:at] || name
 
       default = opts[:default]

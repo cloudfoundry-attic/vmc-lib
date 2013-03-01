@@ -67,10 +67,52 @@ module Fake
 end
 
 module CFoundry::V2
-  class Model
+  class FakeBase < Base
+  end
+
+
+  class FakeClient < Client
     include Fake
 
-    attr_writer :client
+    def initialize(target = "http://example.com", token = nil)
+      @base = FakeBase.new(target, token)
+    end
+
+    private
+
+    def get_many(plural)
+      instance_variable_get(:"@#{plural}")
+    end
+
+    def fake_attributes(attributes)
+      attributes
+    end
+
+    def setup_reverse_relationship(v)
+      if v.is_a?(Model)
+        v.client = self
+      elsif v.is_a?(Array)
+        v.each do |x|
+          setup_reverse_relationship(x)
+        end
+      end
+    end
+  end
+
+
+  module ModelFakes
+    include Fake
+
+    def self.included(klass)
+      klass.class_eval do
+        attr_writer :client
+        attr_reader :diff
+      end
+
+      class << klass
+        attr_writer :object_name
+      end
+    end
 
     private
 
@@ -153,42 +195,8 @@ module CFoundry::V2
     end
   end
 
-
-  class FakeBase < Base
-  end
-
-
-  class FakeClient < Client
-    include Fake
-
-    def initialize(target = "http://example.com", token = nil)
-      @base = FakeBase.new(target, token)
-    end
-
-    private
-
-    def get_many(plural)
-      instance_variable_get(:"@#{plural}")
-    end
-
-    def fake_attributes(attributes)
-      attributes
-    end
-
-    def setup_reverse_relationship(v)
-      if v.is_a?(Model)
-        v.client = self
-      elsif v.is_a?(Array)
-        v.each do |x|
-          setup_reverse_relationship(x)
-        end
-      end
-    end
-  end
-
-
-  class FakeModel < CFoundry::V2::Model
-    attr_reader :diff
+  class FakeModel < Model
+    include ModelFakes
 
     def self.inherited(klass)
       class << klass
@@ -204,34 +212,94 @@ module CFoundry::V2
       klass.object_name = $object_name
       super
     end
-
-    class << self
-      attr_writer :object_name
-    end
   end
 
 
-  module ModelMagic
+  module FakeModelMagic
     def self.define_client_methods(&blk)
+      # TODO
       FakeClient.module_eval(&blk)
     end
 
     def self.define_base_client_methods(&blk)
+      # TODO
       FakeBase.module_eval(&blk)
     end
   end
 
 
-  Model.objects.each_value do |klass|
-    klass.to_many_relations.each do |plural, _|
-      Fake.define_many_association(klass, plural)
+  class FakeModel
+    extend FakeModelMagic
+  end
+
+
+  class Model
+    class << self
+      attr_writer :object_name
     end
+  end
+
+  Model.objects.each_value do |klass|
+    name = "Fake" + klass.name.split("::").last
+
+    # There is a difference between ruby 1.8.7 and 1.8.8 in the order that
+    # the inherited callback gets called. In 1.8.7 the inherited callback
+    # is called after the block; in 1.8.8 and later it's called before.
+    # The upshot for us is we need a failproof way of getting the name
+    # to klass. So we're using a global variable to hand off the value.
+    # Please don't shoot us. - ESH & MMB
+    $object_name = name
+    fake = Class.new(klass) do
+      self.object_name =
+        name.split("::").last.gsub(
+          /([a-z])([A-Z])/,
+          '\1_\2').downcase.to_sym
+    end
+
+    fake.class_eval do
+      include ModelFakes
+
+      attr_writer :client
+
+      klass.attributes.each do |attr, (type, opts)|
+        attribute attr, type, opts
+      end
+
+      klass.to_many_relations.each do |many, _|
+        Fake.define_many_association(self, many)
+      end
+
+      klass.to_one_relations.each do |one, opts|
+        to_one one, opts
+      end
+    end
+
+    const_set(name, fake)
 
     FakeClient.class_eval do
       plural = klass.plural_object_name
 
       attr_writer plural
       Fake.define_many_association(self, plural)
+
+      define_method(klass.object_name) do |*args|
+        guid, partial, _ = args
+
+        x = fake.new(guid, self, nil, partial)
+
+        # when creating an object, automatically set the org/space
+        unless guid
+          if klass.scoped_organization && current_organization
+            x.send(:"#{klass.scoped_organization}=", current_organization)
+          end
+
+          if klass.scoped_space && current_space
+            x.send(:"#{klass.scoped_space}=", current_space)
+          end
+        end
+
+        x
+      end
     end
   end
 end

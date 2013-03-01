@@ -5,7 +5,7 @@ shared_examples_for 'a summarizeable model' do
     let(:summary_endpoint) {
       [ client.target,
         "v2",
-        mymodel.plural_object_name,
+        myobject.class.plural_object_name,
         myobject.guid,
         "summary"
       ].join("/")
