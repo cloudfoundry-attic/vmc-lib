@@ -3,6 +3,7 @@ require "net/https"
 require "net/http/post/multipart"
 require "multi_json"
 require "fileutils"
+require "cfoundry/net_http_progress_tracker"
 
 module CFoundry
   class RestClient
@@ -101,6 +102,9 @@ module CFoundry
         request = method_class.new(uri.request_uri)
         request.body = payload if payload
       end
+
+      request.extend(ProgressTracker)
+      request.upload_progress_callback = options[:progress_callback]
 
       headers = generate_headers(payload, options)
 

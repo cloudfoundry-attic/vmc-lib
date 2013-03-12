@@ -28,7 +28,7 @@ module CFoundry
     #   without checking the resource cache.
     #
     #   Only do this if you know what you're doing.
-    def upload(path, check_resources = true)
+    def upload(path, check_resources = true, &progress_callback)
       unless File.exist? path
         raise CFoundry::Error, "Invalid application path '#{path}'"
       end
@@ -45,7 +45,12 @@ module CFoundry
 
       packed = CFoundry::Zip.pack(tmpdir, zipfile)
 
-      @client.base.upload_app(@guid, packed && zipfile, resources || [])
+      @client.base.upload_app(
+        @guid,
+        packed && zipfile, 
+        resources || [], 
+        progress_callback
+      )
     ensure
       FileUtils.rm_f(zipfile) if zipfile
       FileUtils.rm_rf(tmpdir) if tmpdir

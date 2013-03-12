@@ -49,7 +49,7 @@ module CFoundry::V1
       post("resources", :content => :json, :accept => :json, :payload => fingerprints)
     end
 
-    def upload_app(name, zipfile = nil, resources = [])
+    def upload_app(name, zipfile = nil, resources = [], progress_callback = nil)
       payload = {
         :_method => "put",
         :resources => MultiJson.dump(resources),
@@ -63,7 +63,10 @@ module CFoundry::V1
             "application/zip")
       }
 
-      post("apps", name, "application", :payload => payload)
+      post("apps", name, "application", {
+        :payload => payload,
+        :progress_callback => progress_callback
+      })
     rescue EOFError
       retry
     end
