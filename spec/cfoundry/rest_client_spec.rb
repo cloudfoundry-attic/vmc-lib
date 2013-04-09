@@ -278,4 +278,75 @@ describe CFoundry::RestClient do
       end
     end
   end
+
+  describe '#create_http' do
+    subject { rest_client.send(:create_http, URI.parse(target_uri)) }
+    let(:target_uri) { "http://cloudfoundry.com" }
+
+    context "when no proxy URI is set" do
+      it "should return an instance of the plain Net:HTTP class" do
+        expect(subject).to be_instance_of(Net::HTTP)
+        expect(subject.use_ssl?).to be_false
+        expect(subject.proxy?).to_not be_true
+      end
+    end
+
+    context "when the target is an https URI" do
+      let(:target_uri) { "https://cloudfoundry.com" }
+      it "should return an instance of the plain Net:HTTP class with use_ssl" do
+        expect(subject).to be_instance_of(Net::HTTP)
+        expect(subject.use_ssl?).to be_true
+        expect(subject.proxy?).to_not be_true
+      end
+    end
+
+    context "when a http proxy URI without user/password is set " do
+      before { rest_client.http_proxy = "http://exapmle.com:8080" }
+      it "should return an instance of the proxy class" do
+        expect(subject.proxy?).to be_true
+        expect(subject.proxy_address).to eql("exapmle.com")
+        expect(subject.proxy_port).to eql(8080)
+      end
+    end
+
+    context "when a http proxy URI with user/password is set " do
+      before { rest_client.http_proxy = "http://user:pass@exapmle.com:8080" }
+      it "should return an instance of the proxy class" do
+        expect(subject.proxy?).to be_true
+        expect(subject.proxy_user).to eql("user")
+        expect(subject.proxy_pass).to eql("pass")
+      end
+    end
+
+    context "when a https proxy URI is set and the target is an https URI" do
+      let(:target_uri) { "https://cloudfoundry.com" }
+      before { rest_client.https_proxy = "http://exapmle.com:8080" }
+      it "should return an instance of the proxy class" do
+        expect(subject.proxy?).to be_true
+      end
+    end
+
+    context "when a https proxy URI is set and the target is an http URI" do
+      let(:target_uri) { "http://cloudfoundry.com" }
+      before { rest_client.https_proxy = "http://exapmle.com:8080" }
+      it "should return an instance of the plain Net:HTTP class" do
+        expect(subject.proxy?).to be_nil
+      end
+    end
+
+    context "when a http proxy URI is set and the target is an https URI" do
+      let(:target_uri) { "https://cloudfoundry.com" }
+      before { rest_client.http_proxy = "http://exapmle.com:8080" }
+      it "should return an instance of the plain Net:HTTP class" do
+        expect(subject.proxy?).to be_nil
+      end
+    end
+
+    context "when an invalid proxy URI is set" do
+      before { rest_client.http_proxy = "invalid URI" }
+      it "should raise an error" do
+        expect { subject }.to raise_error(URI::InvalidURIError)
+      end
+    end
+  end
 end
